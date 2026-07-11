@@ -6,7 +6,6 @@ PhD candidate @ Nankai University, College of Computer Science | Research on ret
 
 | Area | Project | Stars | Notes |
 |------|---------|:-----:|-------|
-| Agent context & memory eval | [condenser-bench](https://github.com/JiataiWang/condenser-bench) | coming soon | Isolated benchmark for agent context-management & memory policies (Python harness + public leaderboard). |
 | RAG / knowledge-conflict control | [Swin-VIB](https://github.com/JiataiWang/Swin-VIB) | 1 | Source code for the AAAI 2026 paper *Accommodate Knowledge Conflicts in Retrieval-augmented LLMs: Towards Robust Response Generation in the Wild*. |
 | Multi-view representation | [DistilMVC](https://github.com/JiataiWang/DistilMVC) | 4 | Source code for the TNNLS 2024 paper *Towards Generalized Multi-stage Clustering: Multi-view Self-distillation*. |
 | Research feed | [MyArxiv](https://github.com/JiataiWang/MyArxiv) | new | Personal arXiv tracking and digest setup. |
@@ -38,7 +37,6 @@ Retrieval-augmented generation under context distortion · knowledge-conflict co
 
 | 方向 | 项目 | Stars | 简介 |
 |------|------|:-----:|------|
-| Agent 上下文 / 记忆评测 | [condenser-bench](https://github.com/JiataiWang/condenser-bench) | 即将公开 | 面向 Agent 上下文管理与记忆策略的隔离评测（Python harness + 公开排行榜）。 |
 | RAG / 知识冲突控制 | [Swin-VIB](https://github.com/JiataiWang/Swin-VIB) | 1 | AAAI 2026 论文《Accommodate Knowledge Conflicts in Retrieval-augmented LLMs: Towards Robust Response Generation in the Wild》源码实现。 |
 | 多视图表征 | [DistilMVC](https://github.com/JiataiWang/DistilMVC) | 4 | TNNLS 2024 论文《Towards Generalized Multi-stage Clustering: Multi-view Self-distillation》源码实现。 |
 | 研究追踪 | [MyArxiv](https://github.com/JiataiWang/MyArxiv) | new | 个人 arXiv 跟踪与摘要工具。 |
@@ -53,7 +51,6 @@ Retrieval-augmented generation under context distortion · knowledge-conflict co
 
 ##### 计划中
 
-- [All-Hands-AI/OpenHands](https://github.com/All-Hands-AI/OpenHands) —— 向 Condenser 子系统贡献（长上下文压缩 & 策略）。
 - [bytedance/deer-flow](https://github.com/bytedance/deer-flow) —— 向 memory 模块提交 PR。
 
 ### 研究方向
