@@ -1,0 +1,70 @@
+name: Monthly profile refresh
+
+on:
+  schedule:
+    - cron: "17 1 1 * *"
+      timezone: "America/Los_Angeles"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: monthly-profile-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the profile repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Test the scoped README updater
+        run: python3 -m unittest discover -s tests -p "test_update_profile_contributions.py"
+
+      - name: Refresh merged contribution tables
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/update_profile_contributions.py
+
+      - name: Open a draft update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "No newly merged external PRs; nothing to update."
+            exit 0
+          fi
+
+          git diff --check
+
+          existing_pr="$(
+            gh pr list --state open --limit 100 --json headRefName,url \
+              --jq '[.[] | select(.headRefName | startswith("automation/monthly-profile-refresh-"))][0].url // ""'
+          )"
+          if [[ -n "${existing_pr}" ]]; then
+            echo "::error::A monthly profile refresh PR is already open: ${existing_pr}"
+            exit 1
+          fi
+
+          branch="automation/monthly-profile-refresh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "${branch}"
+          git add README.md
+          git commit -m "Refresh merged profile contributions"
+          git push --set-upstream origin "${branch}"
+
+          gh pr create \
+            --draft \
+            --base main \
+            --head "${branch}" \
+            --title "Monthly profile contribution refresh" \
+            --body "Automated monthly sync of newly merged external PRs. Existing English and Chinese descriptions are preserved exactly; new entries use the merged PR title as a draft description and should be reviewed before merge."
