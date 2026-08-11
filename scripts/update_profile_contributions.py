@@ -240,7 +240,8 @@ def _render_star_badge(repository: str) -> str:
     badge_source = _star_badge_asset_path(repository).as_posix()
     return (
         f'<a href="{repository_url}/stargazers">'
-        f'<img src="{badge_source}" alt="{repository_name} stars"></a>'
+        f'<img src="{badge_source}" width="{STAR_BADGE_WIDTH}" '
+        f'height="{STAR_BADGE_HEIGHT}" alt="{repository_name} stars"></a>'
     )
 
 

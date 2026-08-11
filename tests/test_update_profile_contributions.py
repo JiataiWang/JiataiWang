@@ -61,6 +61,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         badge_sources = re.findall(
             r'<img src="(assets/stars/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.svg)" '
+            rf'width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" '
             r'alt="[^"]+ stars">',
             readme,
         )
@@ -73,6 +74,14 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             root = ElementTree.fromstring(badge)
             self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
             self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
+
+        project_star_cells = re.findall(
+            rf'<td width="{STAR_BADGE_WIDTH}" align="center">'
+            r'<a href="https://github\.com/JiataiWang/[^/]+/stargazers">'
+            r'<img src="assets/stars/JiataiWang/[^\"]+\.svg"',
+            readme,
+        )
+        self.assertEqual(len(project_star_cells), 8)
 
     def test_formats_compact_star_counts(self) -> None:
         self.assertEqual(_format_star_count(0), "0")
