@@ -50,7 +50,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
 
         self.assertEqual(update_readme_text(readme, pull_requests), readme)
 
-    def test_current_star_counts_are_plain_links(self) -> None:
+    def test_current_star_counts_are_star_prefixed_plain_links(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         star_links = re.findall(
             r'<a href="https://github\.com/'
@@ -61,7 +61,10 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertGreater(len(star_links), 0)
         self.assertEqual(len(star_links), readme.count("/stargazers"))
         self.assertTrue(
-            all(re.fullmatch(r"\d+(?:\.\d+)?[kMB]?", count) for _, count in star_links)
+            all(
+                re.fullmatch(r"★ \d+(?:\.\d+)?[kMB]?", count)
+                for _, count in star_links
+            )
         )
         self.assertNotIn("<img", readme)
         self.assertNotIn("assets/stars", readme)
@@ -98,7 +101,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         for repository, star_count in star_counts.items():
             expected = (
                 f'<a href="https://github.com/{repository}/stargazers">'
-                f"{_format_star_count(star_count)}</a>"
+                f"★ {_format_star_count(star_count)}</a>"
             )
             self.assertIn(expected, updated)
         self.assertEqual(update_star_count_links(updated, star_counts), updated)
@@ -148,7 +151,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         for table in (english, chinese):
             generated_row = table.rows_by_url[new_pull_request.url]
             self.assertIn(
-                'href="https://github.com/example/project/stargazers">0</a>',
+                'href="https://github.com/example/project/stargazers">★ 0</a>',
                 generated_row,
             )
             self.assertNotIn("<img", generated_row)
@@ -159,7 +162,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         refreshed = update_star_count_links(updated, star_counts)
         self.assertEqual(
             refreshed.count(
-                '<a href="https://github.com/example/project/stargazers">42</a>'
+                '<a href="https://github.com/example/project/stargazers">★ 42</a>'
             ),
             2,
         )

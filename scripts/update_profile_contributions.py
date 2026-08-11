@@ -256,7 +256,7 @@ def _format_star_count(star_count: int) -> str:
 def _render_star_link(repository: str, star_count: int) -> str:
     _validate_repository(repository)
     compact_count = _format_star_count(star_count)
-    return f'<a href="https://github.com/{repository}/stargazers">{compact_count}</a>'
+    return f'<a href="https://github.com/{repository}/stargazers">★ {compact_count}</a>'
 
 
 def update_star_count_links(
