@@ -30,7 +30,7 @@ jobs:
       - name: Test the scoped profile updater
         run: python3 -m unittest discover -s tests -p "test_update_profile_contributions.py"
 
-      - name: Refresh merged contributions and Star badges
+      - name: Refresh merged contributions and linked Star counts
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/update_profile_contributions.py
@@ -41,7 +41,7 @@ jobs:
           while IFS= read -r status_line; do
             changed_file="${status_line:3}"
             case "${changed_file}" in
-              README.md|assets/stars/*.svg)
+              README.md)
                 ;;
               *)
                 echo "::error::The updater changed a file outside its allowed scope: ${changed_file}"
@@ -50,7 +50,7 @@ jobs:
             esac
           done < <(git status --porcelain=v1 --untracked-files=all)
 
-          git add README.md assets/stars
+          git add README.md
           if git diff --cached --quiet; then
             echo "No profile data changed; nothing to update."
             exit 0

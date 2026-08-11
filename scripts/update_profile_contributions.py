@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Refresh merged external PRs and custom Star badges in the profile.
+"""Refresh merged external PRs and linked Star counts in the profile.
 
 Existing rows are preserved byte-for-byte so curated English and Chinese
 descriptions are never rewritten by automation. New rows use the GitHub PR
 title as their description. Each referenced repository's current star count is
-rendered into an intrinsic 34px SVG; the scheduled workflow commits verified
-updates directly to the profile repository's main branch.
+rendered as plain linked text that inherits GitHub's table typography; the
+scheduled workflow commits verified updates directly to the profile
+repository's main branch.
 """
 
 from __future__ import annotations
@@ -28,10 +29,6 @@ GITHUB_API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
-STAR_BADGE_DIRECTORY = Path("assets/stars")
-STAR_BADGE_HEIGHT = 34
-STAR_BADGE_WIDTH = 108
-STAR_BADGE_LABEL_WIDTH = 54
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
@@ -41,6 +38,11 @@ CHINESE_TABLE_MARKER = "<!-- profile-contributions-zh -->"
 PR_URL_RE = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
 STARGAZERS_URL_RE = re.compile(
     r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/stargazers"
+)
+STAR_LINK_RE = re.compile(
+    r'<a href="https://github\.com/'
+    r'(?P<repository>[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/stargazers">'
+    r".*?</a>"
 )
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -229,27 +231,6 @@ def _escape_table_cell(value: str) -> str:
     return html.escape(" ".join(value.split()))
 
 
-def _star_badge_asset_path(
-    repository: str,
-    badge_directory: Path = STAR_BADGE_DIRECTORY,
-) -> Path:
-    _validate_repository(repository)
-    owner, name = repository.split("/", 1)
-    return badge_directory / owner / f"{name}.svg"
-
-
-def _render_star_badge(repository: str) -> str:
-    _validate_repository(repository)
-    repository_name = repository.split("/", 1)[-1]
-    repository_url = f"https://github.com/{repository}"
-    badge_source = _star_badge_asset_path(repository).as_posix()
-    return (
-        f'<a href="{repository_url}/stargazers">'
-        f'<img src="{badge_source}" width="{STAR_BADGE_WIDTH}" '
-        f'height="{STAR_BADGE_HEIGHT}" alt="{repository_name} stars"></a>'
-    )
-
-
 def extract_star_repositories(readme: str) -> list[str]:
     repositories = set(STARGAZERS_URL_RE.findall(readme))
     for repository in repositories:
@@ -272,65 +253,42 @@ def _format_star_count(star_count: int) -> str:
     raise AssertionError("Unreachable star-count formatting branch")
 
 
-def render_star_badge_svg(repository: str, star_count: int) -> str:
+def _render_star_link(repository: str, star_count: int) -> str:
     _validate_repository(repository)
     compact_count = _format_star_count(star_count)
-    title = html.escape(f"{repository}: {star_count:,} stars")
-    aria_label = html.escape(f"{repository}: {star_count:,} stars", quote=True)
-    message_width = STAR_BADGE_WIDTH - STAR_BADGE_LABEL_WIDTH
-    label_center = STAR_BADGE_LABEL_WIDTH / 2
-    message_center = STAR_BADGE_LABEL_WIDTH + message_width / 2
-
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" viewBox="0 0 {STAR_BADGE_WIDTH} {STAR_BADGE_HEIGHT}" role="img" aria-label="{aria_label}">
-  <title>{title}</title>
-  <defs>
-    <clipPath id="badge-clip">
-      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="5"/>
-    </clipPath>
-  </defs>
-  <g clip-path="url(#badge-clip)">
-    <rect width="{STAR_BADGE_LABEL_WIDTH}" height="{STAR_BADGE_HEIGHT}" fill="#555"/>
-    <rect x="{STAR_BADGE_LABEL_WIDTH}" width="{message_width}" height="{STAR_BADGE_HEIGHT}" fill="#0969da"/>
-  </g>
-  <g fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="{label_center:g}" y="24" font-size="19">stars</text>
-    <text x="{message_center:g}" y="24" font-size="20" font-weight="700">{compact_count}</text>
-  </g>
-</svg>
-"""
+    return f'<a href="https://github.com/{repository}/stargazers">{compact_count}</a>'
 
 
-def render_star_badge_files(
+def update_star_count_links(
     readme: str,
     star_counts: dict[str, int],
-    badge_directory: Path = STAR_BADGE_DIRECTORY,
-) -> dict[Path, str]:
+) -> str:
     repositories = extract_star_repositories(readme)
     missing_repositories = set(repositories) - set(star_counts)
     if missing_repositories:
         missing = ", ".join(sorted(missing_repositories, key=str.casefold))
         raise RuntimeError(f"Missing star counts for README repositories: {missing}")
 
-    return {
-        _star_badge_asset_path(repository, badge_directory): render_star_badge_svg(
-            repository,
-            star_counts[repository],
-        )
-        for repository in repositories
-    }
+    return STAR_LINK_RE.sub(
+        lambda match: _render_star_link(
+            match.group("repository"),
+            star_counts[match.group("repository")],
+        ),
+        readme,
+    )
 
 
 def _render_new_row(pull_request: PullRequest, language: str) -> str:
     repository = pull_request.repository
     repository_url = f"https://github.com/{repository}"
-    stars = _render_star_badge(repository)
+    stars = _render_star_link(repository, 0)
     description = _escape_table_cell(pull_request.title)
 
     if language not in {"en", "zh"}:
         raise ValueError(f"Unsupported language: {language}")
     return (
         f'    <tr><td><a href="{repository_url}">{repository}</a></td>'
-        f'<td width="{STAR_BADGE_WIDTH}" align="center">{stars}</td>'
+        f'<td align="center">{stars}</td>'
         f'<td align="center"><a href="{pull_request.url}">#{pull_request.number}</a></td>'
         f"<td>{description}</td></tr>"
     )
@@ -467,23 +425,20 @@ def main() -> int:
         star_counts = _load_star_fixture(args.star_fixture)
     else:
         star_counts = fetch_star_counts(str(token), repositories)
-    badge_files = render_star_badge_files(updated, star_counts)
+    updated = update_star_count_links(updated, star_counts)
 
     readme_changed = _write_text_if_changed(args.readme, updated)
-    changed_badges = sum(
-        _write_text_if_changed(path, content) for path, content in badge_files.items()
-    )
     added = len(set(PR_URL_RE.findall(updated)) - set(PR_URL_RE.findall(original)))
-    if not readme_changed and not changed_badges:
+    if not readme_changed:
         print(
             f"Profile is current: {len(merged_pull_requests)} merged external PRs and "
-            f"{len(badge_files)} star badges checked."
+            f"{len(repositories)} linked Star counts checked."
         )
         return 0
 
     print(
-        f"Updated profile: appended {added} newly merged PR(s) and refreshed "
-        f"{changed_badges} star badge(s)."
+        f"Updated profile: appended {added} newly merged PR(s) and checked/refreshed "
+        f"linked Star counts for {len(repositories)} repositories."
     )
     return 0
 
