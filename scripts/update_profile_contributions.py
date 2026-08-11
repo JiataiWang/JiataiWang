@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Append newly merged external PRs to the profile contribution tables.
+"""Refresh merged external PRs and custom Star badges in the profile.
 
 Existing rows are preserved byte-for-byte so curated English and Chinese
 descriptions are never rewritten by automation. New rows use the GitHub PR
-title as their description; the scheduled workflow commits the update directly
-to the profile repository's main branch.
+title as their description. Each referenced repository's current star count is
+rendered into an intrinsic 34px SVG; the scheduled workflow commits verified
+updates directly to the profile repository's main branch.
 """
 
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import os
 import re
@@ -26,15 +28,21 @@ GITHUB_API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
+STAR_BADGE_DIRECTORY = Path("assets/stars")
+STAR_BADGE_HEIGHT = 34
+STAR_BADGE_WIDTH = 108
+STAR_BADGE_LABEL_WIDTH = 54
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
-ENGLISH_HEADER = "| Project | Stars | PR | What I Did |"
-ENGLISH_SEPARATOR = "|---------|:-----:|:--:|------------|"
-CHINESE_HEADER = "| 项目 | Stars | PR | 修了啥 |"
-CHINESE_SEPARATOR = "|------|:-----:|:--:|--------|"
+ENGLISH_TABLE_MARKER = "<!-- profile-contributions-en -->"
+CHINESE_TABLE_MARKER = "<!-- profile-contributions-zh -->"
 
 PR_URL_RE = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
+STARGAZERS_URL_RE = re.compile(
+    r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/stargazers"
+)
+REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
 @dataclass(frozen=True)
@@ -50,8 +58,6 @@ class PullRequest:
 class ContributionTable:
     start: int
     end: int
-    header: str
-    separator: str
     rows_by_url: dict[str, str]
     ordered_urls: tuple[str, ...]
 
@@ -136,31 +142,71 @@ def fetch_merged_pull_requests(
     )
 
 
+def _validate_repository(repository: str) -> None:
+    if not REPOSITORY_RE.fullmatch(repository):
+        raise RuntimeError(f"Invalid GitHub repository name: {repository}")
+    owner, name = repository.split("/", 1)
+    if owner in {".", ".."} or name in {".", ".."}:
+        raise RuntimeError(f"Invalid GitHub repository name: {repository}")
+
+
+def fetch_star_counts(token: str, repositories: list[str]) -> dict[str, int]:
+    star_counts: dict[str, int] = {}
+    for repository in repositories:
+        _validate_repository(repository)
+        encoded_repository = urllib.parse.quote(repository, safe="/")
+        payload = _request_json(f"{GITHUB_API}/repos/{encoded_repository}", token)
+
+        full_name = str(payload.get("full_name", ""))
+        if full_name.casefold() != repository.casefold():
+            raise RuntimeError(
+                f"GitHub returned repository {full_name!r} while refreshing {repository!r}"
+            )
+
+        star_count = payload.get("stargazers_count")
+        if isinstance(star_count, bool) or not isinstance(star_count, int) or star_count < 0:
+            raise RuntimeError(f"Invalid star count for {repository}: {star_count!r}")
+        star_counts[repository] = star_count
+
+    return star_counts
+
+
 def _find_table(
     readme: str,
     heading: str,
-    header: str,
-    separator: str,
+    marker: str,
 ) -> ContributionTable:
     heading_index = readme.find(heading)
     if heading_index < 0:
         raise RuntimeError(f"Missing README heading: {heading}")
 
-    table_start = readme.find(header, heading_index + len(heading))
-    if table_start < 0:
-        raise RuntimeError(f"Missing contribution table header after: {heading}")
+    marker_index = readme.find(marker, heading_index + len(heading))
+    if marker_index < 0:
+        raise RuntimeError(f"Missing contribution table marker after: {heading}")
 
-    table_end = readme.find("\n\n", table_start)
+    table_start = marker_index + len(marker)
+    if not readme.startswith("\n<table>\n", table_start):
+        raise RuntimeError(f"Missing contribution table after: {heading}")
+    table_start += 1
+    table_end = readme.find("</table>", table_start)
     if table_end < 0:
-        table_end = len(readme)
+        raise RuntimeError(f"Missing contribution table after: {heading}")
 
-    lines = readme[table_start:table_end].splitlines()
-    if len(lines) < 2 or lines[0] != header or lines[1] != separator:
+    body_open = "  <tbody>\n"
+    body_start = readme.find(body_open, table_start, table_end)
+    body_end = readme.find("  </tbody>", body_start, table_end)
+    if body_start < 0 or body_end < 0:
         raise RuntimeError(f"Unexpected contribution table structure after: {heading}")
+    rows_start = body_start + len(body_open)
+    lines = readme[rows_start:body_end].splitlines()
+    if not lines:
+        raise RuntimeError(f"Empty contribution table after: {heading}")
 
     rows_by_url: dict[str, str] = {}
     ordered_urls: list[str] = []
-    for row in lines[2:]:
+    for row in lines:
+        if not row.startswith("    <tr>") or not row.endswith("</tr>"):
+            raise RuntimeError(f"Unexpected contribution row structure: {row}")
         matches = PR_URL_RE.findall(row)
         if len(matches) != 1:
             raise RuntimeError(f"Expected exactly one PR link in contribution row: {row}")
@@ -172,45 +218,126 @@ def _find_table(
         ordered_urls.append(url)
 
     return ContributionTable(
-        start=table_start,
-        end=table_end,
-        header=header,
-        separator=separator,
+        start=rows_start,
+        end=body_end,
         rows_by_url=rows_by_url,
         ordered_urls=tuple(ordered_urls),
     )
 
 
 def _escape_table_cell(value: str) -> str:
-    return " ".join(value.split()).replace("|", r"\|")
+    return html.escape(" ".join(value.split()))
+
+
+def _star_badge_asset_path(
+    repository: str,
+    badge_directory: Path = STAR_BADGE_DIRECTORY,
+) -> Path:
+    _validate_repository(repository)
+    owner, name = repository.split("/", 1)
+    return badge_directory / owner / f"{name}.svg"
+
+
+def _render_star_badge(repository: str) -> str:
+    _validate_repository(repository)
+    repository_name = repository.split("/", 1)[-1]
+    repository_url = f"https://github.com/{repository}"
+    badge_source = _star_badge_asset_path(repository).as_posix()
+    return (
+        f'<a href="{repository_url}/stargazers">'
+        f'<img src="{badge_source}" width="{STAR_BADGE_WIDTH}" '
+        f'height="{STAR_BADGE_HEIGHT}" alt="{repository_name} stars"></a>'
+    )
+
+
+def extract_star_repositories(readme: str) -> list[str]:
+    repositories = set(STARGAZERS_URL_RE.findall(readme))
+    for repository in repositories:
+        _validate_repository(repository)
+    return sorted(repositories, key=str.casefold)
+
+
+def _format_star_count(star_count: int) -> str:
+    if isinstance(star_count, bool) or not isinstance(star_count, int) or star_count < 0:
+        raise ValueError(f"Invalid star count: {star_count!r}")
+    if star_count < 1_000:
+        return str(star_count)
+
+    for divisor, suffix in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "k")):
+        if star_count >= divisor:
+            value = star_count / divisor
+            precision = 1 if value < 10 and not value.is_integer() else 0
+            return f"{value:.{precision}f}{suffix}"
+
+    raise AssertionError("Unreachable star-count formatting branch")
+
+
+def render_star_badge_svg(repository: str, star_count: int) -> str:
+    _validate_repository(repository)
+    compact_count = _format_star_count(star_count)
+    title = html.escape(f"{repository}: {star_count:,} stars")
+    aria_label = html.escape(f"{repository}: {star_count:,} stars", quote=True)
+    message_width = STAR_BADGE_WIDTH - STAR_BADGE_LABEL_WIDTH
+    label_center = STAR_BADGE_LABEL_WIDTH / 2
+    message_center = STAR_BADGE_LABEL_WIDTH + message_width / 2
+
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" viewBox="0 0 {STAR_BADGE_WIDTH} {STAR_BADGE_HEIGHT}" role="img" aria-label="{aria_label}">
+  <title>{title}</title>
+  <defs>
+    <clipPath id="badge-clip">
+      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="5"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#badge-clip)">
+    <rect width="{STAR_BADGE_LABEL_WIDTH}" height="{STAR_BADGE_HEIGHT}" fill="#555"/>
+    <rect x="{STAR_BADGE_LABEL_WIDTH}" width="{message_width}" height="{STAR_BADGE_HEIGHT}" fill="#0969da"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
+    <text x="{label_center:g}" y="24" font-size="19">stars</text>
+    <text x="{message_center:g}" y="24" font-size="20" font-weight="700">{compact_count}</text>
+  </g>
+</svg>
+"""
+
+
+def render_star_badge_files(
+    readme: str,
+    star_counts: dict[str, int],
+    badge_directory: Path = STAR_BADGE_DIRECTORY,
+) -> dict[Path, str]:
+    repositories = extract_star_repositories(readme)
+    missing_repositories = set(repositories) - set(star_counts)
+    if missing_repositories:
+        missing = ", ".join(sorted(missing_repositories, key=str.casefold))
+        raise RuntimeError(f"Missing star counts for README repositories: {missing}")
+
+    return {
+        _star_badge_asset_path(repository, badge_directory): render_star_badge_svg(
+            repository,
+            star_counts[repository],
+        )
+        for repository in repositories
+    }
 
 
 def _render_new_row(pull_request: PullRequest, language: str) -> str:
     repository = pull_request.repository
-    repository_name = repository.split("/", 1)[-1]
     repository_url = f"https://github.com/{repository}"
-    stars = (
-        f"[![{repository_name} stars]"
-        f"(https://img.shields.io/github/stars/{repository}?style=flat&label=stars)]"
-        f"({repository_url}/stargazers)"
-    )
+    stars = _render_star_badge(repository)
     description = _escape_table_cell(pull_request.title)
 
-    if language == "en":
-        return (
-            f"| [{repository}]({repository_url}) | {stars} | "
-            f"[#{pull_request.number}]({pull_request.url}) | {description} |"
-        )
-    if language == "zh":
-        return (
-            f"| [{repository}]({repository_url}) | {stars} | "
-            f"[#{pull_request.number}]({pull_request.url}) | {description} |"
-        )
-    raise ValueError(f"Unsupported language: {language}")
+    if language not in {"en", "zh"}:
+        raise ValueError(f"Unsupported language: {language}")
+    return (
+        f'    <tr><td><a href="{repository_url}">{repository}</a></td>'
+        f'<td width="{STAR_BADGE_WIDTH}" align="center">{stars}</td>'
+        f'<td align="center"><a href="{pull_request.url}">#{pull_request.number}</a></td>'
+        f"<td>{description}</td></tr>"
+    )
 
 
 def _replace_table(readme: str, table: ContributionTable, rows: list[str]) -> str:
-    replacement = "\n".join([table.header, table.separator, *rows])
+    replacement = "\n".join(rows) + "\n"
     return f"{readme[:table.start]}{replacement}{readme[table.end:]}"
 
 
@@ -218,14 +345,12 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     english = _find_table(
         readme,
         ENGLISH_HEADING,
-        ENGLISH_HEADER,
-        ENGLISH_SEPARATOR,
+        ENGLISH_TABLE_MARKER,
     )
     chinese = _find_table(
         readme,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
 
     if english.ordered_urls != chinese.ordered_urls:
@@ -252,8 +377,7 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     chinese = _find_table(
         updated,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
     chinese_rows = [chinese.rows_by_url[url] for url in chinese.ordered_urls]
     chinese_rows.extend(_render_new_row(pull_request, "zh") for pull_request in new_pull_requests)
@@ -262,14 +386,12 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     updated_english = _find_table(
         updated,
         ENGLISH_HEADING,
-        ENGLISH_HEADER,
-        ENGLISH_SEPARATOR,
+        ENGLISH_TABLE_MARKER,
     )
     updated_chinese = _find_table(
         updated,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
     if updated_english.ordered_urls != updated_chinese.ordered_urls:
         raise RuntimeError("Generated English and Chinese contribution tables differ")
@@ -282,35 +404,87 @@ def _load_fixture(path: Path) -> list[PullRequest]:
     return [PullRequest(**item) for item in data]
 
 
+def _load_star_fixture(path: Path) -> dict[str, int]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise RuntimeError("Star fixture must be a JSON object mapping repositories to counts")
+
+    star_counts: dict[str, int] = {}
+    for repository, star_count in data.items():
+        _validate_repository(repository)
+        if isinstance(star_count, bool) or not isinstance(star_count, int) or star_count < 0:
+            raise RuntimeError(f"Invalid fixture star count for {repository}: {star_count!r}")
+        star_counts[repository] = star_count
+    return star_counts
+
+
+def _write_text_if_changed(path: Path, content: str) -> bool:
+    try:
+        original = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        original = None
+    if original == content:
+        return False
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--readme", type=Path, default=Path("README.md"))
     parser.add_argument("--author", default=DEFAULT_AUTHOR)
     parser.add_argument("--exclude-repository", default=DEFAULT_EXCLUDED_REPOSITORY)
     parser.add_argument("--fixture", type=Path, help="Read normalized PR data from JSON instead of GitHub")
+    parser.add_argument(
+        "--star-fixture",
+        type=Path,
+        help="Read repository-to-star-count data from JSON instead of GitHub",
+    )
     args = parser.parse_args()
+
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if (not args.fixture or not args.star_fixture) and not token:
+        parser.error(
+            "GH_TOKEN or GITHUB_TOKEN is required unless both PR and star fixtures are used"
+        )
 
     if args.fixture:
         merged_pull_requests = _load_fixture(args.fixture)
     else:
-        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-        if not token:
-            parser.error("GH_TOKEN or GITHUB_TOKEN is required when --fixture is not used")
         merged_pull_requests = fetch_merged_pull_requests(
-            token=token,
+            token=str(token),
             author=args.author,
             excluded_repository=args.exclude_repository,
         )
 
     original = args.readme.read_text(encoding="utf-8")
     updated = update_readme_text(original, merged_pull_requests)
-    if updated == original:
-        print(f"Profile is current: {len(merged_pull_requests)} merged external PRs found.")
+
+    repositories = extract_star_repositories(updated)
+    if args.star_fixture:
+        star_counts = _load_star_fixture(args.star_fixture)
+    else:
+        star_counts = fetch_star_counts(str(token), repositories)
+    badge_files = render_star_badge_files(updated, star_counts)
+
+    readme_changed = _write_text_if_changed(args.readme, updated)
+    changed_badges = sum(
+        _write_text_if_changed(path, content) for path, content in badge_files.items()
+    )
+    added = len(set(PR_URL_RE.findall(updated)) - set(PR_URL_RE.findall(original)))
+    if not readme_changed and not changed_badges:
+        print(
+            f"Profile is current: {len(merged_pull_requests)} merged external PRs and "
+            f"{len(badge_files)} star badges checked."
+        )
         return 0
 
-    args.readme.write_text(updated, encoding="utf-8")
-    added = len(set(PR_URL_RE.findall(updated)) - set(PR_URL_RE.findall(original)))
-    print(f"Updated {args.readme}: appended {added} newly merged PR(s).")
+    print(
+        f"Updated profile: appended {added} newly merged PR(s) and refreshed "
+        f"{changed_badges} star badge(s)."
+    )
     return 0
 
 

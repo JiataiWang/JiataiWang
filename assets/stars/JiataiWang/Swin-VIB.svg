@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="34" viewBox="0 0 108 34" role="img" aria-label="JiataiWang/Swin-VIB: 46 stars">
+  <title>JiataiWang/Swin-VIB: 46 stars</title>
+  <defs>
+    <clipPath id="badge-clip">
+      <rect width="108" height="34" rx="5"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#badge-clip)">
+    <rect width="54" height="34" fill="#555"/>
+    <rect x="54" width="54" height="34" fill="#0969da"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
+    <text x="27" y="24" font-size="19">stars</text>
+    <text x="81" y="24" font-size="20" font-weight="700">46</text>
+  </g>
+</svg>
