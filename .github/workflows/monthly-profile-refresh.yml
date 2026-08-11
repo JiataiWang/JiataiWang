@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 concurrency:
   group: monthly-profile-refresh
@@ -24,6 +23,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          ref: main
 
       - name: Test the scoped README updater
         run: python3 -m unittest discover -s tests -p "test_update_profile_contributions.py"
@@ -33,9 +33,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/update_profile_contributions.py
 
-      - name: Open a draft update PR
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit the profile update to main
         shell: bash
         run: |
           if git diff --quiet -- README.md; then
@@ -45,26 +43,15 @@ jobs:
 
           git diff --check
 
-          existing_pr="$(
-            gh pr list --state open --limit 100 --json headRefName,url \
-              --jq '[.[] | select(.headRefName | startswith("automation/monthly-profile-refresh-"))][0].url // ""'
-          )"
-          if [[ -n "${existing_pr}" ]]; then
-            echo "::error::A monthly profile refresh PR is already open: ${existing_pr}"
+          changed_files="$(git diff --name-only)"
+          if [[ "${changed_files}" != "README.md" ]]; then
+            echo "::error::The updater changed files outside README.md:"
+            echo "${changed_files}"
             exit 1
           fi
 
-          branch="automation/monthly-profile-refresh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git switch -c "${branch}"
           git add README.md
           git commit -m "Refresh merged profile contributions"
-          git push --set-upstream origin "${branch}"
-
-          gh pr create \
-            --draft \
-            --base main \
-            --head "${branch}" \
-            --title "Monthly profile contribution refresh" \
-            --body "Automated monthly sync of newly merged external PRs. Existing English and Chinese descriptions are preserved exactly; new entries use the merged PR title as a draft description and should be reviewed before merge."
+          git push origin HEAD:main

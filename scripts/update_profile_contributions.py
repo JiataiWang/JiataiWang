@@ -2,9 +2,9 @@
 """Append newly merged external PRs to the profile contribution tables.
 
 Existing rows are preserved byte-for-byte so curated English and Chinese
-descriptions are never rewritten by automation. New rows use the GitHub PR title
-as a neutral draft description; the scheduled workflow opens a draft PR for
-review instead of changing the public profile directly.
+descriptions are never rewritten by automation. New rows use the GitHub PR
+title as their description; the scheduled workflow commits the update directly
+to the profile repository's main branch.
 """
 
 from __future__ import annotations

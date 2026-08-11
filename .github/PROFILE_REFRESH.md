@@ -12,7 +12,7 @@ from the repository's **Actions** tab.
   `JiataiWang` that are currently merged.
 - Existing English and Chinese contribution rows are preserved byte-for-byte.
 - A newly merged PR is appended to both tables with a live star badge and the
-  PR title as its initial description.
+  PR title as its description.
 
 ## Safety boundaries
 
@@ -26,15 +26,16 @@ from the repository's **Actions** tab.
 - It excludes PRs in `JiataiWang/JiataiWang`, so profile-maintenance PRs do not
   appear as open-source contributions.
 
-## Review flow
+## Update flow
 
-When new merged PRs are found, the workflow opens a **draft pull request**. The
-new English and Chinese descriptions initially use the PR title. Review and
-polish those new descriptions before merging; all previously curated copy is
-left untouched.
+When new merged PRs are found, the workflow commits the README update directly
+to `main`. The new English and Chinese descriptions use the PR title exactly;
+all previously curated copy is left untouched. No manual review or merge is
+required for these monthly updates.
 
-If an earlier monthly refresh PR is still open, the next run fails with a link
-to that PR instead of creating a duplicate.
+If `main` changes after the workflow starts, Git rejects the non-fast-forward
+push instead of overwriting the newer commit. The next scheduled or manual run
+can then retry the update safely.
 
 ## GitHub scheduling note
 
