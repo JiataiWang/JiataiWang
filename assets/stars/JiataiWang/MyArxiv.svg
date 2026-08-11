@@ -1,16 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="154" height="48" viewBox="0 0 154 48" role="img" aria-label="JiataiWang/MyArxiv: 0 stars">
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="34" viewBox="0 0 108 34" role="img" aria-label="JiataiWang/MyArxiv: 0 stars">
   <title>JiataiWang/MyArxiv: 0 stars</title>
   <defs>
     <clipPath id="badge-clip">
-      <rect width="154" height="48" rx="7"/>
+      <rect width="108" height="34" rx="5"/>
     </clipPath>
   </defs>
   <g clip-path="url(#badge-clip)">
-    <rect width="89" height="48" fill="#555"/>
-    <rect x="89" width="65" height="48" fill="#0969da"/>
+    <rect width="62" height="34" fill="#555"/>
+    <rect x="62" width="46" height="34" fill="#0969da"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="44.5" y="31" font-size="19">stars</text>
-    <text x="121.5" y="31" font-size="20" font-weight="700">0</text>
+    <text x="31" y="22" font-size="13">stars</text>
+    <text x="85" y="22" font-size="14" font-weight="700">0</text>
   </g>
 </svg>

@@ -4,7 +4,7 @@
 Existing rows are preserved byte-for-byte so curated English and Chinese
 descriptions are never rewritten by automation. New rows use the GitHub PR
 title as their description. Each referenced repository's current star count is
-rendered into an intrinsic 48px SVG; the scheduled workflow commits verified
+rendered into an intrinsic 34px SVG; the scheduled workflow commits verified
 updates directly to the profile repository's main branch.
 """
 
@@ -29,9 +29,9 @@ API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
 STAR_BADGE_DIRECTORY = Path("assets/stars")
-STAR_BADGE_HEIGHT = 48
-STAR_BADGE_WIDTH = 154
-STAR_BADGE_LABEL_WIDTH = 89
+STAR_BADGE_HEIGHT = 34
+STAR_BADGE_WIDTH = 108
+STAR_BADGE_LABEL_WIDTH = 62
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
@@ -285,7 +285,7 @@ def render_star_badge_svg(repository: str, star_count: int) -> str:
   <title>{title}</title>
   <defs>
     <clipPath id="badge-clip">
-      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="7"/>
+      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="5"/>
     </clipPath>
   </defs>
   <g clip-path="url(#badge-clip)">
@@ -293,8 +293,8 @@ def render_star_badge_svg(repository: str, star_count: int) -> str:
     <rect x="{STAR_BADGE_LABEL_WIDTH}" width="{message_width}" height="{STAR_BADGE_HEIGHT}" fill="#0969da"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="{label_center:g}" y="31" font-size="19">stars</text>
-    <text x="{message_center:g}" y="31" font-size="20" font-weight="700">{compact_count}</text>
+    <text x="{label_center:g}" y="22" font-size="13">stars</text>
+    <text x="{message_center:g}" y="22" font-size="14" font-weight="700">{compact_count}</text>
   </g>
 </svg>
 """
