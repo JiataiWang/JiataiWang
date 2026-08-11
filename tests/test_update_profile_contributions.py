@@ -11,12 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from update_profile_contributions import (  # noqa: E402
-    CHINESE_HEADER,
     CHINESE_HEADING,
-    CHINESE_SEPARATOR,
-    ENGLISH_HEADER,
+    CHINESE_TABLE_MARKER,
     ENGLISH_HEADING,
-    ENGLISH_SEPARATOR,
+    ENGLISH_TABLE_MARKER,
     PullRequest,
     STAR_BADGE_HEIGHT,
     STAR_BADGE_WIDTH,
@@ -34,8 +32,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         table = _find_table(
             readme,
             ENGLISH_HEADING,
-            ENGLISH_HEADER,
-            ENGLISH_SEPARATOR,
+            ENGLISH_TABLE_MARKER,
         )
         pull_requests = []
         for index, url in enumerate(table.ordered_urls):
@@ -75,13 +72,20 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
             self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
 
-        project_star_cells = re.findall(
+        star_cells = re.findall(
             rf'<td width="{STAR_BADGE_WIDTH}" align="center">'
-            r'<a href="https://github\.com/JiataiWang/[^/]+/stargazers">'
-            r'<img src="assets/stars/JiataiWang/[^\"]+\.svg"',
+            r'<a href="https://github\.com/[^\"]+/stargazers">'
+            r'<img src="assets/stars/[^\"]+\.svg" '
+            rf'width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}"',
             readme,
         )
-        self.assertEqual(len(project_star_cells), 8)
+        self.assertEqual(len(star_cells), len(badge_sources))
+        self.assertEqual(
+            readme.count(
+                f'<th width="{STAR_BADGE_WIDTH}" align="center">Stars</th>'
+            ),
+            4,
+        )
 
     def test_formats_compact_star_counts(self) -> None:
         self.assertEqual(_format_star_count(0), "0")
@@ -92,13 +96,16 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertEqual(_format_star_count(379_000), "379k")
         self.assertEqual(_format_star_count(1_500_000), "1.5M")
 
-    def test_renders_intrinsic_56px_star_badge(self) -> None:
+    def test_renders_intrinsic_target_size_star_badge(self) -> None:
         badge = render_star_badge_svg("example/project", 379_123)
         root = ElementTree.fromstring(badge)
 
         self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
         self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
-        self.assertEqual(root.attrib["viewBox"], "0 0 180 56")
+        self.assertEqual(
+            root.attrib["viewBox"],
+            f"0 0 {STAR_BADGE_WIDTH} {STAR_BADGE_HEIGHT}",
+        )
         self.assertIn("example/project: 379,123 stars", badge)
         self.assertIn(">379k</text>", badge)
 
@@ -108,7 +115,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         new_pull_request = PullRequest(
             repository="example/project",
             number=42,
-            title="fix: preserve pipes | in generated table rows",
+            title="fix: preserve pipes | and <tags> in generated table rows",
             url="https://github.com/example/project/pull/42",
             merged_at="2026-12-01T00:00:00Z",
         )
@@ -121,7 +128,10 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         )
         self.assertIn(original_description, updated)
         self.assertEqual(updated.count(new_pull_request.url), 2)
-        self.assertEqual(updated.count(r"fix: preserve pipes \| in generated table rows"), 2)
+        self.assertEqual(
+            updated.count("fix: preserve pipes | and &lt;tags&gt; in generated table rows"),
+            2,
+        )
         self.assertEqual(
             update_readme_text(updated, [*pull_requests, new_pull_request]),
             updated,
@@ -130,14 +140,12 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         english = _find_table(
             updated,
             ENGLISH_HEADING,
-            ENGLISH_HEADER,
-            ENGLISH_SEPARATOR,
+            ENGLISH_TABLE_MARKER,
         )
         chinese = _find_table(
             updated,
             CHINESE_HEADING,
-            CHINESE_HEADER,
-            CHINESE_SEPARATOR,
+            CHINESE_TABLE_MARKER,
         )
         self.assertEqual(english.ordered_urls, chinese.ordered_urls)
         for table in (english, chinese):
@@ -155,6 +163,13 @@ class UpdateProfileContributionsTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "not reported as merged"):
             update_readme_text(readme, pull_requests[:-1])
+
+    def test_refuses_an_unmarked_contribution_table(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        malformed = readme.replace(ENGLISH_TABLE_MARKER, "", 1)
+
+        with self.assertRaisesRegex(RuntimeError, "Missing contribution table marker"):
+            _find_table(malformed, ENGLISH_HEADING, ENGLISH_TABLE_MARKER)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 Existing rows are preserved byte-for-byte so curated English and Chinese
 descriptions are never rewritten by automation. New rows use the GitHub PR
 title as their description. Each referenced repository's current star count is
-rendered into an intrinsic 56px SVG; the scheduled workflow commits verified
+rendered into an intrinsic 48px SVG; the scheduled workflow commits verified
 updates directly to the profile repository's main branch.
 """
 
@@ -29,16 +29,14 @@ API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
 STAR_BADGE_DIRECTORY = Path("assets/stars")
-STAR_BADGE_HEIGHT = 56
-STAR_BADGE_WIDTH = 180
-STAR_BADGE_LABEL_WIDTH = 104
+STAR_BADGE_HEIGHT = 48
+STAR_BADGE_WIDTH = 154
+STAR_BADGE_LABEL_WIDTH = 89
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
-ENGLISH_HEADER = "| Project | Stars | PR | What I Did |"
-ENGLISH_SEPARATOR = "|---------|:-----:|:--:|------------|"
-CHINESE_HEADER = "| 项目 | Stars | PR | 修了啥 |"
-CHINESE_SEPARATOR = "|------|:-----:|:--:|--------|"
+ENGLISH_TABLE_MARKER = "<!-- profile-contributions-en -->"
+CHINESE_TABLE_MARKER = "<!-- profile-contributions-zh -->"
 
 PR_URL_RE = re.compile(r"https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
 STARGAZERS_URL_RE = re.compile(
@@ -60,8 +58,6 @@ class PullRequest:
 class ContributionTable:
     start: int
     end: int
-    header: str
-    separator: str
     rows_by_url: dict[str, str]
     ordered_urls: tuple[str, ...]
 
@@ -178,28 +174,39 @@ def fetch_star_counts(token: str, repositories: list[str]) -> dict[str, int]:
 def _find_table(
     readme: str,
     heading: str,
-    header: str,
-    separator: str,
+    marker: str,
 ) -> ContributionTable:
     heading_index = readme.find(heading)
     if heading_index < 0:
         raise RuntimeError(f"Missing README heading: {heading}")
 
-    table_start = readme.find(header, heading_index + len(heading))
-    if table_start < 0:
-        raise RuntimeError(f"Missing contribution table header after: {heading}")
+    marker_index = readme.find(marker, heading_index + len(heading))
+    if marker_index < 0:
+        raise RuntimeError(f"Missing contribution table marker after: {heading}")
 
-    table_end = readme.find("\n\n", table_start)
+    table_start = marker_index + len(marker)
+    if not readme.startswith("\n<table>\n", table_start):
+        raise RuntimeError(f"Missing contribution table after: {heading}")
+    table_start += 1
+    table_end = readme.find("</table>", table_start)
     if table_end < 0:
-        table_end = len(readme)
+        raise RuntimeError(f"Missing contribution table after: {heading}")
 
-    lines = readme[table_start:table_end].splitlines()
-    if len(lines) < 2 or lines[0] != header or lines[1] != separator:
+    body_open = "  <tbody>\n"
+    body_start = readme.find(body_open, table_start, table_end)
+    body_end = readme.find("  </tbody>", body_start, table_end)
+    if body_start < 0 or body_end < 0:
         raise RuntimeError(f"Unexpected contribution table structure after: {heading}")
+    rows_start = body_start + len(body_open)
+    lines = readme[rows_start:body_end].splitlines()
+    if not lines:
+        raise RuntimeError(f"Empty contribution table after: {heading}")
 
     rows_by_url: dict[str, str] = {}
     ordered_urls: list[str] = []
-    for row in lines[2:]:
+    for row in lines:
+        if not row.startswith("    <tr>") or not row.endswith("</tr>"):
+            raise RuntimeError(f"Unexpected contribution row structure: {row}")
         matches = PR_URL_RE.findall(row)
         if len(matches) != 1:
             raise RuntimeError(f"Expected exactly one PR link in contribution row: {row}")
@@ -211,17 +218,15 @@ def _find_table(
         ordered_urls.append(url)
 
     return ContributionTable(
-        start=table_start,
-        end=table_end,
-        header=header,
-        separator=separator,
+        start=rows_start,
+        end=body_end,
         rows_by_url=rows_by_url,
         ordered_urls=tuple(ordered_urls),
     )
 
 
 def _escape_table_cell(value: str) -> str:
-    return " ".join(value.split()).replace("|", r"\|")
+    return html.escape(" ".join(value.split()))
 
 
 def _star_badge_asset_path(
@@ -280,7 +285,7 @@ def render_star_badge_svg(repository: str, star_count: int) -> str:
   <title>{title}</title>
   <defs>
     <clipPath id="badge-clip">
-      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="8"/>
+      <rect width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" rx="7"/>
     </clipPath>
   </defs>
   <g clip-path="url(#badge-clip)">
@@ -288,8 +293,8 @@ def render_star_badge_svg(repository: str, star_count: int) -> str:
     <rect x="{STAR_BADGE_LABEL_WIDTH}" width="{message_width}" height="{STAR_BADGE_HEIGHT}" fill="#0969da"/>
   </g>
   <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="{label_center:g}" y="36" font-size="22">stars</text>
-    <text x="{message_center:g}" y="36" font-size="23" font-weight="700">{compact_count}</text>
+    <text x="{label_center:g}" y="31" font-size="19">stars</text>
+    <text x="{message_center:g}" y="31" font-size="20" font-weight="700">{compact_count}</text>
   </g>
 </svg>
 """
@@ -321,21 +326,18 @@ def _render_new_row(pull_request: PullRequest, language: str) -> str:
     stars = _render_star_badge(repository)
     description = _escape_table_cell(pull_request.title)
 
-    if language == "en":
-        return (
-            f"| [{repository}]({repository_url}) | {stars} | "
-            f"[#{pull_request.number}]({pull_request.url}) | {description} |"
-        )
-    if language == "zh":
-        return (
-            f"| [{repository}]({repository_url}) | {stars} | "
-            f"[#{pull_request.number}]({pull_request.url}) | {description} |"
-        )
-    raise ValueError(f"Unsupported language: {language}")
+    if language not in {"en", "zh"}:
+        raise ValueError(f"Unsupported language: {language}")
+    return (
+        f'    <tr><td><a href="{repository_url}">{repository}</a></td>'
+        f'<td width="{STAR_BADGE_WIDTH}" align="center">{stars}</td>'
+        f'<td align="center"><a href="{pull_request.url}">#{pull_request.number}</a></td>'
+        f"<td>{description}</td></tr>"
+    )
 
 
 def _replace_table(readme: str, table: ContributionTable, rows: list[str]) -> str:
-    replacement = "\n".join([table.header, table.separator, *rows])
+    replacement = "\n".join(rows) + "\n"
     return f"{readme[:table.start]}{replacement}{readme[table.end:]}"
 
 
@@ -343,14 +345,12 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     english = _find_table(
         readme,
         ENGLISH_HEADING,
-        ENGLISH_HEADER,
-        ENGLISH_SEPARATOR,
+        ENGLISH_TABLE_MARKER,
     )
     chinese = _find_table(
         readme,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
 
     if english.ordered_urls != chinese.ordered_urls:
@@ -377,8 +377,7 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     chinese = _find_table(
         updated,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
     chinese_rows = [chinese.rows_by_url[url] for url in chinese.ordered_urls]
     chinese_rows.extend(_render_new_row(pull_request, "zh") for pull_request in new_pull_requests)
@@ -387,14 +386,12 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
     updated_english = _find_table(
         updated,
         ENGLISH_HEADING,
-        ENGLISH_HEADER,
-        ENGLISH_SEPARATOR,
+        ENGLISH_TABLE_MARKER,
     )
     updated_chinese = _find_table(
         updated,
         CHINESE_HEADING,
-        CHINESE_HEADER,
-        CHINESE_SEPARATOR,
+        CHINESE_TABLE_MARKER,
     )
     if updated_english.ordered_urls != updated_chinese.ordered_urls:
         raise RuntimeError("Generated English and Chinese contribution tables differ")

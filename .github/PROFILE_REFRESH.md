@@ -6,9 +6,9 @@ from the repository's **Actions** tab.
 
 ## What it updates
 
-- Project and contribution star counts are rendered into custom `180 × 56` SVG
-  badges under `assets/stars/`. Their intrinsic height avoids GitHub shrinking
-  them back to Shields.io's 20px source height.
+- Project and contribution star counts are rendered into custom `154 × 48` SVG
+  badges under `assets/stars/`. All four profile tables reserve the same 154px
+  Stars column so English and Chinese sections render at one consistent size.
 - Star counts are refreshed from GitHub during each monthly or manual run.
   Between runs, a displayed count can be up to one month behind GitHub.
 - The updater searches GitHub for external pull requests authored by
