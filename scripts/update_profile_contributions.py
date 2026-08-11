@@ -26,6 +26,7 @@ GITHUB_API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
+STAR_BADGE_HEIGHT = 24
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
@@ -185,15 +186,21 @@ def _escape_table_cell(value: str) -> str:
     return " ".join(value.split()).replace("|", r"\|")
 
 
-def _render_new_row(pull_request: PullRequest, language: str) -> str:
-    repository = pull_request.repository
+def _render_star_badge(repository: str) -> str:
     repository_name = repository.split("/", 1)[-1]
     repository_url = f"https://github.com/{repository}"
-    stars = (
-        f"[![{repository_name} stars]"
-        f"(https://img.shields.io/github/stars/{repository}?style=flat&label=stars)]"
-        f"({repository_url}/stargazers)"
+    return (
+        f'<a href="{repository_url}/stargazers">'
+        f'<img src="https://img.shields.io/github/stars/{repository}'
+        f'?style=flat&amp;label=stars" alt="{repository_name} stars" '
+        f'height="{STAR_BADGE_HEIGHT}"></a>'
     )
+
+
+def _render_new_row(pull_request: PullRequest, language: str) -> str:
+    repository = pull_request.repository
+    repository_url = f"https://github.com/{repository}"
+    stars = _render_star_badge(repository)
     description = _escape_table_cell(pull_request.title)
 
     if language == "en":

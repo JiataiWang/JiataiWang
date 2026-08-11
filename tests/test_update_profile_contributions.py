@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -16,6 +17,7 @@ from update_profile_contributions import (  # noqa: E402
     ENGLISH_HEADING,
     ENGLISH_SEPARATOR,
     PullRequest,
+    STAR_BADGE_HEIGHT,
     _find_table,
     update_readme_text,
 )
@@ -48,6 +50,21 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         pull_requests = self._current_pull_requests(readme)
 
         self.assertEqual(update_readme_text(readme, pull_requests), readme)
+
+    def test_current_star_badges_use_configured_height(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        badge_tags = re.findall(
+            r'<img\b[^>]*\bsrc="https://img\.shields\.io/github/stars/[^"]+"[^>]*>',
+            readme,
+        )
+
+        self.assertGreater(len(badge_tags), 0)
+        self.assertEqual(
+            len(badge_tags),
+            readme.count("https://img.shields.io/github/stars/"),
+        )
+        for badge_tag in badge_tags:
+            self.assertIn(f'height="{STAR_BADGE_HEIGHT}"', badge_tag)
 
     def test_appends_new_pr_to_both_tables_and_preserves_existing_copy(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -87,6 +104,10 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             CHINESE_SEPARATOR,
         )
         self.assertEqual(english.ordered_urls, chinese.ordered_urls)
+        for table in (english, chinese):
+            generated_row = table.rows_by_url[new_pull_request.url]
+            self.assertIn(f'height="{STAR_BADGE_HEIGHT}"', generated_row)
+            self.assertIn("style=flat&amp;label=stars", generated_row)
 
     def test_refuses_to_sync_when_an_existing_row_is_not_merged(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
