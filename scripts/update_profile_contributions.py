@@ -26,7 +26,7 @@ GITHUB_API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
-STAR_BADGE_HEIGHT = 24
+STAR_BADGE_HEIGHT = 56
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
