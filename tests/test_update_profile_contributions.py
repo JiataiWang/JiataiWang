@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import sys
 import unittest
+import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
@@ -18,7 +19,12 @@ from update_profile_contributions import (  # noqa: E402
     ENGLISH_SEPARATOR,
     PullRequest,
     STAR_BADGE_HEIGHT,
+    STAR_BADGE_WIDTH,
+    _format_star_count,
     _find_table,
+    extract_star_repositories,
+    render_star_badge_files,
+    render_star_badge_svg,
     update_readme_text,
 )
 
@@ -51,20 +57,41 @@ class UpdateProfileContributionsTests(unittest.TestCase):
 
         self.assertEqual(update_readme_text(readme, pull_requests), readme)
 
-    def test_current_star_badges_use_configured_height(self) -> None:
+    def test_current_star_badges_use_intrinsic_custom_assets(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        badge_tags = re.findall(
-            r'<img\b[^>]*\bsrc="https://img\.shields\.io/github/stars/[^"]+"[^>]*>',
+        badge_sources = re.findall(
+            r'<img src="(assets/stars/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.svg)" '
+            r'alt="[^"]+ stars">',
             readme,
         )
 
-        self.assertGreater(len(badge_tags), 0)
-        self.assertEqual(
-            len(badge_tags),
-            readme.count("https://img.shields.io/github/stars/"),
-        )
-        for badge_tag in badge_tags:
-            self.assertIn(f'height="{STAR_BADGE_HEIGHT}"', badge_tag)
+        self.assertGreater(len(badge_sources), 0)
+        self.assertEqual(len(badge_sources), readme.count("/stargazers"))
+        self.assertNotIn("img.shields.io", readme)
+        for badge_source in set(badge_sources):
+            badge = (ROOT / badge_source).read_text(encoding="utf-8")
+            root = ElementTree.fromstring(badge)
+            self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
+            self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
+
+    def test_formats_compact_star_counts(self) -> None:
+        self.assertEqual(_format_star_count(0), "0")
+        self.assertEqual(_format_star_count(999), "999")
+        self.assertEqual(_format_star_count(1_000), "1k")
+        self.assertEqual(_format_star_count(1_500), "1.5k")
+        self.assertEqual(_format_star_count(12_345), "12k")
+        self.assertEqual(_format_star_count(379_000), "379k")
+        self.assertEqual(_format_star_count(1_500_000), "1.5M")
+
+    def test_renders_intrinsic_56px_star_badge(self) -> None:
+        badge = render_star_badge_svg("example/project", 379_123)
+        root = ElementTree.fromstring(badge)
+
+        self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
+        self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
+        self.assertEqual(root.attrib["viewBox"], "0 0 180 56")
+        self.assertIn("example/project: 379,123 stars", badge)
+        self.assertIn(">379k</text>", badge)
 
     def test_appends_new_pr_to_both_tables_and_preserves_existing_copy(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -106,8 +133,12 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertEqual(english.ordered_urls, chinese.ordered_urls)
         for table in (english, chinese):
             generated_row = table.rows_by_url[new_pull_request.url]
-            self.assertIn(f'height="{STAR_BADGE_HEIGHT}"', generated_row)
-            self.assertIn("style=flat&amp;label=stars", generated_row)
+            self.assertIn('src="assets/stars/example/project.svg"', generated_row)
+
+        repositories = extract_star_repositories(updated)
+        self.assertIn(new_pull_request.repository, repositories)
+        with self.assertRaisesRegex(RuntimeError, "Missing star counts"):
+            render_star_badge_files(updated, {})
 
     def test_refuses_to_sync_when_an_existing_row_is_not_merged(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

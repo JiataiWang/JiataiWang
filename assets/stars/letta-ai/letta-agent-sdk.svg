@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" viewBox="0 0 180 56" role="img" aria-label="letta-ai/letta-agent-sdk: 81 stars">
+  <title>letta-ai/letta-agent-sdk: 81 stars</title>
+  <defs>
+    <clipPath id="badge-clip">
+      <rect width="180" height="56" rx="8"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#badge-clip)">
+    <rect width="104" height="56" fill="#555"/>
+    <rect x="104" width="76" height="56" fill="#0969da"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
+    <text x="52" y="36" font-size="22">stars</text>
+    <text x="142" y="36" font-size="23" font-weight="700">81</text>
+  </g>
+</svg>

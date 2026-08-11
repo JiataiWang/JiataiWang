@@ -6,18 +6,22 @@ from the repository's **Actions** tab.
 
 ## What it updates
 
-- Project and contribution star badges already read live data from Shields.io,
-  so no scheduled rewrite is needed for star counts.
+- Project and contribution star counts are rendered into custom `180 × 56` SVG
+  badges under `assets/stars/`. Their intrinsic height avoids GitHub shrinking
+  them back to Shields.io's 20px source height.
+- Star counts are refreshed from GitHub during each monthly or manual run.
+  Between runs, a displayed count can be up to one month behind GitHub.
 - The updater searches GitHub for external pull requests authored by
   `JiataiWang` that are currently merged.
 - Existing English and Chinese contribution rows are preserved byte-for-byte.
-- A newly merged PR is appended to both tables with a live star badge and the
+- A newly merged PR is appended to both tables with a custom Star badge and the
   PR title as its description.
 
 ## Safety boundaries
 
 - The updater only touches the two contribution tables below
-  `Agent frameworks / runtime` and `Agent 框架`.
+  `Agent frameworks / runtime` and `Agent 框架`, plus the generated SVG files
+  under `assets/stars/`.
 - It never edits the introduction, project tables, research directions, or
   existing contribution descriptions.
 - It stops without writing if the English and Chinese tables differ, if the
@@ -28,10 +32,10 @@ from the repository's **Actions** tab.
 
 ## Update flow
 
-When new merged PRs are found, the workflow commits the README update directly
-to `main`. The new English and Chinese descriptions use the PR title exactly;
-all previously curated copy is left untouched. No manual review or merge is
-required for these monthly updates.
+When a Star count changes or new merged PRs are found, the workflow commits the
+generated SVGs and any README update directly to `main`. New English and Chinese
+descriptions use the PR title exactly; all previously curated copy is left
+untouched. No manual review or merge is required for these monthly updates.
 
 If `main` changes after the workflow starts, Git rejects the non-fast-forward
 push instead of overwriting the newer commit. The next scheduled or manual run
