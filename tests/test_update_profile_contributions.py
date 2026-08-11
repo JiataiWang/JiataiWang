@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import sys
 import unittest
-import xml.etree.ElementTree as ElementTree
 from pathlib import Path
 
 
@@ -16,14 +15,11 @@ from update_profile_contributions import (  # noqa: E402
     ENGLISH_HEADING,
     ENGLISH_TABLE_MARKER,
     PullRequest,
-    STAR_BADGE_HEIGHT,
-    STAR_BADGE_WIDTH,
-    _format_star_count,
     _find_table,
+    _format_star_count,
     extract_star_repositories,
-    render_star_badge_files,
-    render_star_badge_svg,
     update_readme_text,
+    update_star_count_links,
 )
 
 
@@ -54,38 +50,34 @@ class UpdateProfileContributionsTests(unittest.TestCase):
 
         self.assertEqual(update_readme_text(readme, pull_requests), readme)
 
-    def test_current_star_badges_use_intrinsic_custom_assets(self) -> None:
+    def test_current_star_counts_are_star_prefixed_plain_links(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
-        badge_sources = re.findall(
-            r'<img src="(assets/stars/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.svg)" '
-            rf'width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}" '
-            r'alt="[^"]+ stars">',
+        star_links = re.findall(
+            r'<a href="https://github\.com/'
+            r'([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/stargazers">([^<]+)</a>',
             readme,
         )
 
-        self.assertGreater(len(badge_sources), 0)
-        self.assertEqual(len(badge_sources), readme.count("/stargazers"))
-        self.assertNotIn("img.shields.io", readme)
-        for badge_source in set(badge_sources):
-            badge = (ROOT / badge_source).read_text(encoding="utf-8")
-            root = ElementTree.fromstring(badge)
-            self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
-            self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
+        self.assertGreater(len(star_links), 0)
+        self.assertEqual(len(star_links), readme.count("/stargazers"))
+        self.assertTrue(
+            all(
+                re.fullmatch(r"★&nbsp;\d+(?:\.\d+)?[kMB]?", count)
+                for _, count in star_links
+            )
+        )
+        self.assertNotIn("<img", readme)
+        self.assertNotIn("assets/stars", readme)
+        self.assertNotIn('<th width="', readme)
+        self.assertNotIn('<td width="', readme)
+        self.assertEqual(readme.count('<th align="center">Stars</th>'), 4)
 
         star_cells = re.findall(
-            rf'<td width="{STAR_BADGE_WIDTH}" align="center">'
-            r'<a href="https://github\.com/[^\"]+/stargazers">'
-            r'<img src="assets/stars/[^\"]+\.svg" '
-            rf'width="{STAR_BADGE_WIDTH}" height="{STAR_BADGE_HEIGHT}"',
+            r'<td align="center"><a href="https://github\.com/'
+            r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/stargazers">[^<]+</a></td>',
             readme,
         )
-        self.assertEqual(len(star_cells), len(badge_sources))
-        self.assertEqual(
-            readme.count(
-                f'<th width="{STAR_BADGE_WIDTH}" align="center">Stars</th>'
-            ),
-            4,
-        )
+        self.assertEqual(len(star_cells), len(star_links))
 
     def test_formats_compact_star_counts(self) -> None:
         self.assertEqual(_format_star_count(0), "0")
@@ -96,20 +88,26 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertEqual(_format_star_count(379_000), "379k")
         self.assertEqual(_format_star_count(1_500_000), "1.5M")
 
-    def test_renders_intrinsic_target_size_star_badge(self) -> None:
-        badge = render_star_badge_svg("example/project", 379_123)
-        root = ElementTree.fromstring(badge)
+    def test_updates_all_linked_star_counts(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        repositories = extract_star_repositories(readme)
+        star_counts = {
+            repository: 379_123 + index
+            for index, repository in enumerate(repositories)
+        }
 
-        self.assertEqual(root.attrib["width"], str(STAR_BADGE_WIDTH))
-        self.assertEqual(root.attrib["height"], str(STAR_BADGE_HEIGHT))
-        self.assertEqual(
-            root.attrib["viewBox"],
-            f"0 0 {STAR_BADGE_WIDTH} {STAR_BADGE_HEIGHT}",
-        )
-        self.assertIn("example/project: 379,123 stars", badge)
-        self.assertIn('font-size="19">stars</text>', badge)
-        self.assertIn('font-size="20" font-weight="700">379k</text>', badge)
-        self.assertIn(">379k</text>", badge)
+        updated = update_star_count_links(readme, star_counts)
+
+        for repository, star_count in star_counts.items():
+            expected = (
+                f'<a href="https://github.com/{repository}/stargazers">'
+                f"★&nbsp;{_format_star_count(star_count)}</a>"
+            )
+            self.assertIn(expected, updated)
+        self.assertEqual(update_star_count_links(updated, star_counts), updated)
+
+        with self.assertRaisesRegex(RuntimeError, "Missing star counts"):
+            update_star_count_links(readme, {})
 
     def test_appends_new_pr_to_both_tables_and_preserves_existing_copy(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -152,12 +150,22 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertEqual(english.ordered_urls, chinese.ordered_urls)
         for table in (english, chinese):
             generated_row = table.rows_by_url[new_pull_request.url]
-            self.assertIn('src="assets/stars/example/project.svg"', generated_row)
+            self.assertIn(
+                'href="https://github.com/example/project/stargazers">★&nbsp;0</a>',
+                generated_row,
+            )
+            self.assertNotIn("<img", generated_row)
 
         repositories = extract_star_repositories(updated)
         self.assertIn(new_pull_request.repository, repositories)
-        with self.assertRaisesRegex(RuntimeError, "Missing star counts"):
-            render_star_badge_files(updated, {})
+        star_counts = {repository: 42 for repository in repositories}
+        refreshed = update_star_count_links(updated, star_counts)
+        self.assertEqual(
+            refreshed.count(
+                '<a href="https://github.com/example/project/stargazers">★&nbsp;42</a>'
+            ),
+            2,
+        )
 
     def test_refuses_to_sync_when_an_existing_row_is_not_merged(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
