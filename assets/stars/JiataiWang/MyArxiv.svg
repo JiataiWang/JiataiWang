@@ -6,11 +6,11 @@
     </clipPath>
   </defs>
   <g clip-path="url(#badge-clip)">
-    <rect width="62" height="34" fill="#555"/>
-    <rect x="62" width="46" height="34" fill="#0969da"/>
+    <rect width="54" height="34" fill="#555"/>
+    <rect x="54" width="54" height="34" fill="#0969da"/>
   </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="31" y="22" font-size="13">stars</text>
-    <text x="85" y="22" font-size="14" font-weight="700">0</text>
+  <g fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
+    <text x="27" y="24" font-size="19">stars</text>
+    <text x="81" y="24" font-size="20" font-weight="700">0</text>
   </g>
 </svg>

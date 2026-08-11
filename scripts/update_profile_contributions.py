@@ -31,7 +31,7 @@ DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
 STAR_BADGE_DIRECTORY = Path("assets/stars")
 STAR_BADGE_HEIGHT = 34
 STAR_BADGE_WIDTH = 108
-STAR_BADGE_LABEL_WIDTH = 62
+STAR_BADGE_LABEL_WIDTH = 54
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
@@ -292,9 +292,9 @@ def render_star_badge_svg(repository: str, star_count: int) -> str:
     <rect width="{STAR_BADGE_LABEL_WIDTH}" height="{STAR_BADGE_HEIGHT}" fill="#555"/>
     <rect x="{STAR_BADGE_LABEL_WIDTH}" width="{message_width}" height="{STAR_BADGE_HEIGHT}" fill="#0969da"/>
   </g>
-  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
-    <text x="{label_center:g}" y="22" font-size="13">stars</text>
-    <text x="{message_center:g}" y="22" font-size="14" font-weight="700">{compact_count}</text>
+  <g fill="#fff" text-anchor="middle" font-family="Arial,Helvetica,DejaVu Sans,sans-serif" text-rendering="geometricPrecision">
+    <text x="{label_center:g}" y="24" font-size="19">stars</text>
+    <text x="{message_center:g}" y="24" font-size="20" font-weight="700">{compact_count}</text>
   </g>
 </svg>
 """

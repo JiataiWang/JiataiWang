@@ -107,6 +107,8 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             f"0 0 {STAR_BADGE_WIDTH} {STAR_BADGE_HEIGHT}",
         )
         self.assertIn("example/project: 379,123 stars", badge)
+        self.assertIn('font-size="19">stars</text>', badge)
+        self.assertIn('font-size="20" font-weight="700">379k</text>', badge)
         self.assertIn(">379k</text>", badge)
 
     def test_appends_new_pr_to_both_tables_and_preserves_existing_copy(self) -> None:
