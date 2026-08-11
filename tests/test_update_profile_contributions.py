@@ -62,7 +62,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         self.assertEqual(len(star_links), readme.count("/stargazers"))
         self.assertTrue(
             all(
-                re.fullmatch(r"★ \d+(?:\.\d+)?[kMB]?", count)
+                re.fullmatch(r"★&nbsp;\d+(?:\.\d+)?[kMB]?", count)
                 for _, count in star_links
             )
         )
@@ -101,7 +101,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         for repository, star_count in star_counts.items():
             expected = (
                 f'<a href="https://github.com/{repository}/stargazers">'
-                f"★ {_format_star_count(star_count)}</a>"
+                f"★&nbsp;{_format_star_count(star_count)}</a>"
             )
             self.assertIn(expected, updated)
         self.assertEqual(update_star_count_links(updated, star_counts), updated)
@@ -151,7 +151,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         for table in (english, chinese):
             generated_row = table.rows_by_url[new_pull_request.url]
             self.assertIn(
-                'href="https://github.com/example/project/stargazers">★ 0</a>',
+                'href="https://github.com/example/project/stargazers">★&nbsp;0</a>',
                 generated_row,
             )
             self.assertNotIn("<img", generated_row)
@@ -162,7 +162,7 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         refreshed = update_star_count_links(updated, star_counts)
         self.assertEqual(
             refreshed.count(
-                '<a href="https://github.com/example/project/stargazers">★ 42</a>'
+                '<a href="https://github.com/example/project/stargazers">★&nbsp;42</a>'
             ),
             2,
         )
