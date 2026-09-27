@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import io
 import re
 import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 
@@ -120,7 +122,13 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             merged_at="2026-12-01T00:00:00Z",
         )
 
-        updated = update_readme_text(readme, [*pull_requests, new_pull_request])
+        summaries = {
+            new_pull_request.url: {
+                "en": "Preserve pipes | and <tags> in generated table rows.",
+                "zh": "保留表格摘要中的管道符 | 与 <标签>，避免格式损坏。",
+            }
+        }
+        updated = update_readme_text(readme, [*pull_requests, new_pull_request], summaries)
 
         original_description = (
             "Show target node name in exec-tool transparency messages so multi-agent "
@@ -128,12 +136,11 @@ class UpdateProfileContributionsTests(unittest.TestCase):
         )
         self.assertIn(original_description, updated)
         self.assertEqual(updated.count(new_pull_request.url), 2)
+        self.assertNotIn("fix: preserve pipes", updated)
+        self.assertEqual(updated.count("Preserve pipes | and &lt;tags&gt; in generated table rows."), 1)
+        self.assertEqual(updated.count("保留表格摘要中的管道符 | 与 &lt;标签&gt;，避免格式损坏。"), 1)
         self.assertEqual(
-            updated.count("fix: preserve pipes | and &lt;tags&gt; in generated table rows"),
-            2,
-        )
-        self.assertEqual(
-            update_readme_text(updated, [*pull_requests, new_pull_request]),
+            update_readme_text(updated, [*pull_requests, new_pull_request], summaries),
             updated,
         )
 
@@ -148,6 +155,8 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             CHINESE_TABLE_MARKER,
         )
         self.assertEqual(english.ordered_urls, chinese.ordered_urls)
+        self.assertIn("Preserve pipes", english.rows_by_url[new_pull_request.url])
+        self.assertIn("保留表格摘要", chinese.rows_by_url[new_pull_request.url])
         for table in (english, chinese):
             generated_row = table.rows_by_url[new_pull_request.url]
             self.assertIn(
@@ -166,6 +175,31 @@ class UpdateProfileContributionsTests(unittest.TestCase):
             ),
             2,
         )
+
+    def test_missing_bilingual_summary_never_falls_back_to_title(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        pull_requests = self._current_pull_requests(readme)
+        new_pull_request = PullRequest(
+            repository="example/project",
+            number=42,
+            title="fix: raw PR title must not appear",
+            url="https://github.com/example/project/pull/42",
+        )
+        for summary in ({}, {"en": "English only"}, {"en": "English", "zh": "  "}):
+            with self.subTest(summary=summary):
+                warnings = io.StringIO()
+                with redirect_stderr(warnings):
+                    updated = update_readme_text(
+                        readme,
+                        [*pull_requests, new_pull_request],
+                        {new_pull_request.url: summary},
+                    )
+                self.assertEqual(updated, readme)
+                self.assertIn(new_pull_request.url, warnings.getvalue())
+                repositories = extract_star_repositories(updated)
+                refreshed = update_star_count_links(updated, {repo: 123 for repo in repositories})
+                self.assertIn("★&nbsp;123</a>", refreshed)
+                self.assertNotIn(new_pull_request.url, refreshed)
 
     def test_refuses_to_sync_when_an_existing_row_is_not_merged(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

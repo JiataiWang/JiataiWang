@@ -2,8 +2,10 @@
 """Refresh merged external PRs and linked Star counts in the profile.
 
 Existing rows are preserved byte-for-byte so curated English and Chinese
-descriptions are never rewritten by automation. New rows use the GitHub PR
-title as their description. Each referenced repository's current star count is
+descriptions are never rewritten by automation. New rows require curated
+English and Chinese summaries; PR titles are never used as descriptions.
+PRs without both summaries are reported for follow-up while Star counts still
+refresh. Each referenced repository's current star count is
 rendered as plain linked text that inherits GitHub's table typography; the
 scheduled workflow commits verified updates directly to the profile
 repository's main branch.
@@ -29,6 +31,7 @@ GITHUB_API = "https://api.github.com"
 API_VERSION = "2022-11-28"
 DEFAULT_AUTHOR = "JiataiWang"
 DEFAULT_EXCLUDED_REPOSITORY = "JiataiWang/JiataiWang"
+DEFAULT_SUMMARIES = Path(__file__).resolve().parents[1] / ".github/contribution-summaries.json"
 
 ENGLISH_HEADING = "##### Agent frameworks / runtime"
 CHINESE_HEADING = "##### Agent 框架"
@@ -278,14 +281,12 @@ def update_star_count_links(
     )
 
 
-def _render_new_row(pull_request: PullRequest, language: str) -> str:
+def _render_new_row(pull_request: PullRequest, summary: str) -> str:
     repository = pull_request.repository
     repository_url = f"https://github.com/{repository}"
     stars = _render_star_link(repository, 0)
-    description = _escape_table_cell(pull_request.title)
+    description = _escape_table_cell(summary)
 
-    if language not in {"en", "zh"}:
-        raise ValueError(f"Unsupported language: {language}")
     return (
         f'    <tr><td><a href="{repository_url}">{repository}</a></td>'
         f'<td align="center">{stars}</td>'
@@ -299,7 +300,11 @@ def _replace_table(readme: str, table: ContributionTable, rows: list[str]) -> st
     return f"{readme[:table.start]}{replacement}{readme[table.end:]}"
 
 
-def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> str:
+def update_readme_text(
+    readme: str,
+    merged_pull_requests: list[PullRequest],
+    summaries: dict[str, dict[str, str]] | None = None,
+) -> str:
     english = _find_table(
         readme,
         ENGLISH_HEADING,
@@ -320,16 +325,31 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
         missing = ", ".join(sorted(missing_from_github))
         raise RuntimeError(f"Existing README rows are not reported as merged by GitHub: {missing}")
 
-    new_pull_requests = [
-        pull_request
-        for pull_request in merged_pull_requests
-        if pull_request.url not in english.rows_by_url
-    ]
+    summaries = summaries or {}
+    new_pull_requests = []
+    for pull_request in merged_pull_requests:
+        if pull_request.url in english.rows_by_url:
+            continue
+        summary = summaries.get(pull_request.url, {})
+        if not all(
+            isinstance(summary.get(language), str) and summary[language].strip()
+            for language in ("en", "zh")
+        ):
+            print(
+                f"Pending contribution: {pull_request.url} needs curated English and "
+                "Chinese summaries; no title fallback was added.",
+                file=sys.stderr,
+            )
+            continue
+        new_pull_requests.append(pull_request)
     if not new_pull_requests:
         return readme
 
     english_rows = [english.rows_by_url[url] for url in english.ordered_urls]
-    english_rows.extend(_render_new_row(pull_request, "en") for pull_request in new_pull_requests)
+    english_rows.extend(
+        _render_new_row(pull_request, summaries[pull_request.url]["en"])
+        for pull_request in new_pull_requests
+    )
     updated = _replace_table(readme, english, english_rows)
 
     chinese = _find_table(
@@ -338,7 +358,10 @@ def update_readme_text(readme: str, merged_pull_requests: list[PullRequest]) -> 
         CHINESE_TABLE_MARKER,
     )
     chinese_rows = [chinese.rows_by_url[url] for url in chinese.ordered_urls]
-    chinese_rows.extend(_render_new_row(pull_request, "zh") for pull_request in new_pull_requests)
+    chinese_rows.extend(
+        _render_new_row(pull_request, summaries[pull_request.url]["zh"])
+        for pull_request in new_pull_requests
+    )
     updated = _replace_table(updated, chinese, chinese_rows)
 
     updated_english = _find_table(
@@ -394,6 +417,12 @@ def main() -> int:
     parser.add_argument("--readme", type=Path, default=Path("README.md"))
     parser.add_argument("--author", default=DEFAULT_AUTHOR)
     parser.add_argument("--exclude-repository", default=DEFAULT_EXCLUDED_REPOSITORY)
+    parser.add_argument(
+        "--summaries",
+        type=Path,
+        default=DEFAULT_SUMMARIES,
+        help="JSON mapping PR URLs to curated en/zh contribution summaries",
+    )
     parser.add_argument("--fixture", type=Path, help="Read normalized PR data from JSON instead of GitHub")
     parser.add_argument(
         "--star-fixture",
@@ -418,7 +447,8 @@ def main() -> int:
         )
 
     original = args.readme.read_text(encoding="utf-8")
-    updated = update_readme_text(original, merged_pull_requests)
+    summaries = json.loads(args.summaries.read_text(encoding="utf-8"))
+    updated = update_readme_text(original, merged_pull_requests, summaries)
 
     repositories = extract_star_repositories(updated)
     if args.star_fixture:
@@ -431,7 +461,7 @@ def main() -> int:
     added = len(set(PR_URL_RE.findall(updated)) - set(PR_URL_RE.findall(original)))
     if not readme_changed:
         print(
-            f"Profile is current: {len(merged_pull_requests)} merged external PRs and "
+            f"Profile checked: {len(merged_pull_requests)} merged external PRs and "
             f"{len(repositories)} linked Star counts checked."
         )
         return 0

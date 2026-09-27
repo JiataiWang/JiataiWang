@@ -1,0 +1,22 @@
+{
+  "https://github.com/MemTensor/MemOS/pull/2234": {
+    "en": "Preserve complete vLLM streaming responses and handle empty or reasoning-only streams safely, preventing truncated output and stream-processing errors.",
+    "zh": "修复 vLLM 流式响应丢失分块的问题，并妥善处理空流与纯推理流，避免输出截断和流处理异常。"
+  },
+  "https://github.com/vllm-project/vllm/pull/53553": {
+    "en": "Keep JinaVL image features, cache keys, and prompt positions aligned during cache reuse, preventing mismatched query and document images in multimodal reranking.",
+    "zh": "保证 JinaVL 复用缓存时图像特征、缓存键与提示词位置一致，避免多模态重排序中查询与文档图像错配。"
+  },
+  "https://github.com/vllm-project/vllm-omni/pull/6543": {
+    "en": "Make MOSS-TTS adapters prioritize request seeds over deployment defaults, restoring request-level control of randomness in Nano speech generation.",
+    "zh": "让 MOSS-TTS 适配器优先采用请求指定的随机种子，恢复 Nano 语音生成的请求级随机性控制。"
+  },
+  "https://github.com/vllm-project/vllm/pull/56310": {
+    "en": "Enable UUID-based reuse of cached audio without resending payloads, preserving input order when cached and new audio are mixed in a request.",
+    "zh": "支持通过 UUID 复用已缓存音频，无需重复传输音频数据，并保持缓存音频与新音频混合请求中的输入顺序。"
+  },
+  "https://github.com/thedotmack/claude-mem/pull/3407": {
+    "en": "Align the timeline-report skill's schema guidance and recall queries with the actual database, preventing SQL failures and misleading recall statistics.",
+    "zh": "将时间线报告 skill 的数据库结构说明和记忆召回查询与实际表结构对齐，避免 SQL 执行失败及误导性的召回统计。"
+  }
+}

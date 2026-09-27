@@ -14,8 +14,13 @@ from the repository's **Actions** tab.
 - The updater searches GitHub for external pull requests authored by
   `JiataiWang` that are currently merged.
 - Existing English and Chinese contribution rows are preserved byte-for-byte.
-- A newly merged PR is appended to both tables with a linked Star count and the
-  PR title as its description.
+- A newly merged PR is appended to both tables with a linked Star count once
+  `.github/contribution-summaries.json` contains curated English (`en`) and
+  Chinese (`zh`) summaries keyed by its full PR URL. Each summary describes the
+  contribution and its practical effect instead of repeating the PR title.
+- PRs missing either summary are left out of both tables and reported in the
+  workflow log for follow-up. Star counts continue to refresh; the updater
+  never falls back to PR titles.
 
 ## Safety boundaries
 
@@ -31,10 +36,15 @@ from the repository's **Actions** tab.
 
 ## Update flow
 
-When a displayed Star count changes or new merged PRs are found, the workflow
-commits the README update directly to `main`. New English and Chinese
-descriptions use the PR title exactly; all previously curated copy is left
-untouched. No manual review or merge is required for these monthly updates.
+When a displayed Star count changes or new merged PRs with bilingual summaries
+are found, the workflow commits the README update directly to `main`. All
+previously curated copy is left untouched. No manual review or merge is
+required for these monthly updates.
+
+To include a newly merged contribution, read the PR and add concise `en` and
+`zh` summaries to `.github/contribution-summaries.json`, then run the updater
+or the workflow. Edit existing contribution descriptions directly in both
+README tables; changing the summary file does not overwrite existing rows.
 
 If `main` changes after the workflow starts, Git rejects the non-fast-forward
 push instead of overwriting the newer commit. The next scheduled or manual run
